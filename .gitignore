@@ -1,14 +1,33 @@
-*~
-*.aux
-*.fdb_latexmk
-*.fls
+# Build outputs
+**/bin/
+**/obj/
+**/publish/
+
+# Dependencies
+**/node_modules/
+**/.nuget/
+
+# User-specific files
+*.user
+*.suo
+
+# Compiled files
+*.dll
+*.exe
+*.zip
+
+# Logs
 *.log
-*.blg
-*.out
-*.spl
-*.toc
-*.synctex*
-**/bin
-**/obj
-TMP*.sh
+
+# Environment files
+.env
+appsettings.Development.json
+
+# IDE files
+.vscode/
+.vs/
+.idea/
+
+# OS files
 .DS_Store
+Thumbs.db
