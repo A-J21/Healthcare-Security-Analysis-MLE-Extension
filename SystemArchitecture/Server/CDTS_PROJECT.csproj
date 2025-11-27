@@ -1,31 +1,41 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Global settings -->
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
+
+    <!-- Do NOT fail the build on warnings -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!-- Suppress specific noisy warnings for this project -->
+    <NoWarn>SYSLIB0011;CA2200</NoWarn>
   </PropertyGroup>
+
+  <!-- Debug configuration -->
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <IntermediateOutputPath>obj\Debug</IntermediateOutputPath>
-    <DebugSymbols>false</DebugSymbols>
-    <DebugType/>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>portable</DebugType>
     <OutputPath>bin\Debug</OutputPath>
-    <DefineConstants/>
-    <NoWarn/>
     <NoStdLib>false</NoStdLib>
   </PropertyGroup>
+
+  <!-- Release configuration -->
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <IntermediateOutputPath>obj\Release</IntermediateOutputPath>
-    <DebugSymbols>false</DebugSymbols>
-    <DebugType/>
-    <Optimize>false</Optimize>
+    <!-- IMPORTANT: emit PDBs so /sourcelink and /embed are happy -->
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>portable</DebugType>
+    <Optimize>true</Optimize>
     <OutputPath>bin\Release</OutputPath>
-    <DefineConstants/>
-    <NoWarn/>
     <NoStdLib>false</NoStdLib>
   </PropertyGroup>
+
   <ItemGroup>
-    <Folder Include="Logics\"/>
+    <Folder Include="Logics\" />
   </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="MongoDB.Driver" Version="2.11.5"/>
-    <PackageReference Include="Microsoft.Research.SEALNet" Version="3.5.8"/>
+    <PackageReference Include="MongoDB.Driver" Version="2.11.5" />
+    <PackageReference Include="Microsoft.Research.SEALNet" Version="3.5.8" />
   </ItemGroup>
 </Project>

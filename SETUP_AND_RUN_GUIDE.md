@@ -30,7 +30,6 @@ sudo apt update
 # Install current .NET SDK (8.0)
 sudo apt install -y dotnet-sdk-8.0
 
-
 # Install nginx
 sudo apt install -y nginx
 
@@ -61,7 +60,7 @@ Copy the entire project to your Ubuntu VM (or clone from your repo):
 ```bash
 cd ~
 # If using git:
-git clone <YOUR_REPO_URL>
+git clone https://github.com/A-J21/Healthcare-Security-Analysis-MLE-Extension.git
 cd Healthcare-Security-Analysis-MLE-Extension
 
 # Or copy files via SCP/Shared Folder
@@ -74,8 +73,6 @@ You need to load at least one model into MongoDB. Choose which use case you want
 #### Option A: Healthcare (Original - 1835 features)
 ```bash
 cd ~/Healthcare-Security-Analysis-MLE-Extension/SystemArchitecture/configDB
-# Copy the original coefs.csv here (from ModelTraining/ if you have it)
-# Edit loadModelFromCsv.py and set: modelName = "LogisticRegression"
 python3 loadModelFromCsv.py
 ```
 
@@ -119,7 +116,7 @@ python3 loadModelFromCsv.py
 cd ~/Healthcare-Security-Analysis-MLE-Extension/SystemArchitecture/Server
 
 # Build the server
-dotnet publish --configuration Release
+dotnet publish --configuration Release -p:DebugType=portable
 
 # Deploy to web server directory
 sudo mkdir -p /var/www/MLE/
@@ -219,6 +216,7 @@ Note the IP address (typically `10.0.2.15` for NAT or `192.168.x.x` for Bridged)
 
 ### Step 10: Configure Port Forwarding (If Using VirtualBox NAT)
 
+Just so you're not freaked out at this point, you can turn off your VM and continue these steps and you should not have to redo anything above.
 **On your Windows host machine:**
 
 1. Open VirtualBox Manager
@@ -231,12 +229,7 @@ Note the IP address (typically `10.0.2.15` for NAT or `192.168.x.x` for Bridged)
    - Guest Port: `80`
 5. Start the VM
 
-**OR use command line (Windows):**
-```cmd
-cd "C:\Program Files\Oracle\VirtualBox"
-VBoxManage list vms
-VBoxManage modifyvm "YourVMName" --natpf1 "MLE,tcp,,8080,,80"
-```
+You'll probably get a windows security alert at this point when you start the VM
 
 ---
 
@@ -249,7 +242,7 @@ VBoxManage modifyvm "YourVMName" --natpf1 "MLE,tcp,,8080,,80"
 On your Windows machine:
 
 ```cmd
-cd "C:\Users\Chris\OneDrive\Desktop\Healthcare-Security-Analysis-MLE-Extension\SystemArchitecture\ClientGUI"
+cd Healthcare-Security-Analysis-MLE-Extension\SystemArchitecture\ClientGUI"
 dotnet build
 ```
 
