@@ -28,7 +28,6 @@ LABEL:
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 import random
 
 def generate_financial_data(n_samples=1000, fraud_ratio=0.1, random_seed=42):
@@ -59,9 +58,15 @@ def generate_financial_data(n_samples=1000, fraud_ratio=0.1, random_seed=42):
         amount = np.random.lognormal(mean=4.5, sigma=1.0)  # Log-normal distribution
         amount = min(amount, 10000)  # Cap at $10,000
         amount_norm = amount / 10000.0  # Normalize to 0-1
-        
+
         # Feature 2: Time of day (0-23 hours, normalized)
-        hour = np.random.choice([6,7,8,9,10,11,12,13,14,15,16,17,18,19,20], p=[0.02,0.03,0.05,0.08,0.1,0.1,0.1,0.1,0.1,0.08,0.05,0.03,0.02,0.01,0.01])
+        hours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        hour_probs = np.array(
+            [0.02,0.03,0.05,0.08,0.10,0.10,0.10,0.10,0.10,0.08,0.05,0.03,0.02,0.02,0.02],
+            dtype=float
+        )
+        hour_probs = hour_probs / hour_probs.sum()  # force exact sum = 1.0
+        hour = np.random.choice(hours, p=hour_probs)
         hour_norm = hour / 23.0
         
         # Feature 3: Day of week (0=Monday, 6=Sunday, normalized)
