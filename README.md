@@ -1,66 +1,51 @@
-# Healthcare Security Analysis - Machine Learning with Encryption (MLE)
+# Setup and Run Guide
+
+This guide walks you through setting up and running the extended MLE system step-by-step.
 
 ## Overview
-This project implements a Machine Learning with Encryption (MLE) framework for privacy-preserving predictions on sensitive data. Originally designed for cancer genomics prediction, this system uses homomorphic encryption to perform machine learning inference without exposing raw patient data.
 
-**Research Paper:** [Machine Learning in Precision Medicine to Preserve Privacy via Encryption](https://arxiv.org/abs/2102.03412)
+The system still has two parts:
+1. **Ubuntu Server**: Runs the ML inference service (never sees unencrypted data)
+2. **Windows Client**: Encrypts data, sends to server, decrypts results (GUI or can still use console)
 
-## System Architecture
+## Part 1: Ubuntu Server Setup
 
-```
-┌─────────────────┐         ┌──────────────────┐         ┌─────────────┐
-│  Windows Client │────────▶│  Ubuntu Server   │────────▶│   MongoDB   │
-│   (MLE.exe)     │  HTTP   │  (.NET + nginx)  │         │   (Models)  │
-└─────────────────┘         └──────────────────┘         └─────────────┘
-     Encrypts Data           Processes Encrypted          Stores Model
-                            Data (never sees raw)         Weights
-```
+### Step 1: Install Dependencies
 
-## Prerequisites
-
-### Ubuntu Server (Linux VM)
-- Ubuntu 20.04 or later
-- .NET Core 3.1 SDK
-- MongoDB 4.4+
-- nginx web server
-- Python 3.8+ with pip
-
-### Windows Client
-- Windows 10/11
-- No additional software needed (client is self-contained)
-
-## Installation Guide
-
-### Part 1: Ubuntu Server Setup
-
-#### 1.1 Install Dependencies
+On your Ubuntu VM, run:
 
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
 # Install .NET Core 3.1 SDK
-wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+# Get the Microsoft repo for Ubuntu 22.04 (jammy), not 20.04
+wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
 sudo dpkg -i packages-microsoft-prod.deb
 rm packages-microsoft-prod.deb
+
+# Update package lists
 sudo apt update
-sudo apt install -y dotnet-sdk-3.1
+
+# Install current .NET SDK (8.0)
+sudo apt install -y dotnet-sdk-8.0
 
 # Install nginx
 sudo apt install -y nginx
 
 # Install MongoDB
-wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
-echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 sudo apt update
 sudo apt install -y mongodb-org
 
+
 # Install Python dependencies
 sudo apt install -y python3-pip
-pip3 install pandas numpy pymongo
+pip3 install pandas numpy pymongo scikit-learn
 ```
 
-#### 1.2 Start MongoDB
+### Step 2: Start MongoDB
 
 ```bash
 sudo systemctl start mongod
@@ -68,40 +53,77 @@ sudo systemctl enable mongod
 sudo systemctl status mongod  # Should show "active (running)"
 ```
 
-#### 1.3 Clone the Repository
+### Step 3: Copy Project Files to Ubuntu
+
+Copy the entire project to your Ubuntu VM (or clone from your repo):
 
 ```bash
 cd ~
-git clone <YOUR_REPO_URL>
-cd Healthcare-Security-Analysis-MLE
+# If using git:
+git clone https://github.com/A-J21/Healthcare-Security-Analysis-MLE-Extension.git
+cd Healthcare-Security-Analysis-MLE-Extension
+
+# Or copy files via SCP/Shared Folder
 ```
 
-#### 1.4 Load the ML Model into MongoDB
+### Step 4: Train and Load Models
 
+You need to load at least one model into MongoDB. Choose which use case you want to start with:
+
+#### Option A: Healthcare (Original - 1835 features)
 ```bash
-cd SystemArchitecture/configDB
+cd ~/Healthcare-Security-Analysis-MLE-Extension/SystemArchitecture/configDB
 python3 loadModelFromCsv.py
-
-# Verify model is loaded
-mongo models --eval "db.models.find().pretty()"
 ```
 
-You should see the LogisticRegression model with weights.
+#### Option B: Financial Fraud Detection (10 features)
+```bash
+# First, generate and train the model
+cd ~/Healthcare-Security-Analysis-MLE-Extension/DataGenerators
+python3 generate_financial_data.py
 
-#### 1.5 Configure and Build the Server
+cd ../ModelTraining
+python3 train_financial_model.py
+
+# Now load it into MongoDB
+cd ../SystemArchitecture/configDB
+cp ../../ModelTraining/coefs.csv .
+# Edit loadModelFromCsv.py and set: modelName = "FinancialFraud"
+python3 loadModelFromCsv.py
+```
+
+#### Option C: Academic Grade Prediction (10 features)
+```bash
+# First, generate and train the model
+cd ~/Healthcare-Security-Analysis-MLE-Extension/DataGenerators
+python3 generate_academic_data.py
+
+cd ../ModelTraining
+python3 train_academic_model.py
+
+# Now load it into MongoDB
+cd ../SystemArchitecture/configDB
+cp ../../ModelTraining/coefs.csv .
+# Edit loadModelFromCsv.py and set: modelName = "AcademicGrade"
+python3 loadModelFromCsv.py
+```
+
+**You can load multiple models!** Just repeat the process with different model names.
+
+### Step 5: Build and Deploy Server
 
 ```bash
-cd ~/Healthcare-Security-Analysis-MLE/SystemArchitecture/Server
+cd ~/Healthcare-Security-Analysis-MLE-Extension/SystemArchitecture/Server
 
 # Build the server
-dotnet publish --configuration Release
+dotnet publish --configuration Release -p:DebugType=portable
 
 # Deploy to web server directory
 sudo mkdir -p /var/www/MLE/
 sudo cp -r ./bin/Release/netcoreapp3.1/publish/* /var/www/MLE/
 ```
 
-#### 1.6 Create the systemd Service
+### Step 6: Create systemd Service
 
 ```bash
 sudo nano /etc/systemd/system/MLE.service
@@ -128,26 +150,23 @@ WantedBy=multi-user.target
 
 Save and exit (Ctrl+X, Y, Enter).
 
-#### 1.7 Configure nginx
+### Step 7: Configure nginx
 
 ```bash
 sudo nano /etc/nginx/nginx.conf
 ```
 
 Add this line inside the `http` block:
-
 ```nginx
 client_max_body_size 100M;
 ```
 
 Then configure the site:
-
 ```bash
 sudo nano /etc/nginx/sites-available/default
 ```
 
 Replace contents with:
-
 ```nginx
 server {
     listen 80;
@@ -168,9 +187,7 @@ server {
 }
 ```
 
-Save and exit.
-
-#### 1.8 Test and Start Services
+### Step 8: Start Services
 
 ```bash
 # Test nginx configuration
@@ -187,18 +204,19 @@ sudo systemctl status MLE.service
 sudo systemctl status nginx
 ```
 
-Both should show "active (running)" in green.
+Both should show "active (running)".
 
-#### 1.9 Get Your VM's IP Address
+### Step 9: Get VM IP Address
 
 ```bash
 ip addr show
 ```
 
-Look for the IP address (typically `10.0.2.15` for NAT or `192.168.x.x` for Bridged).
+Note the IP address (typically `10.0.2.15` for NAT or `192.168.x.x` for Bridged).
 
-### Part 2: VirtualBox Port Forwarding (If Using NAT)
+### Step 10: Configure Port Forwarding (If Using VirtualBox NAT)
 
+Just so you're not freaked out at this point, you can turn off your VM and continue these steps and you should not have to redo anything above.
 **On your Windows host machine:**
 
 1. Open VirtualBox Manager
@@ -211,106 +229,190 @@ Look for the IP address (typically `10.0.2.15` for NAT or `192.168.x.x` for Brid
    - Guest Port: `80`
 5. Start the VM
 
-**OR use command line (Windows):**
+You'll probably get a windows security alert at this point when you start the VM
+
+---
+
+## Part 2: Windows Client Setup
+
+### Option A: GUI Application (Recommended)
+
+#### Step 1: Build the GUI
+
+On your Windows machine:
 
 ```cmd
-cd "C:\Program Files\Oracle\VirtualBox"
-VBoxManage list vms
-VBoxManage modifyvm "YourVMName" --natpf1 "MLE,tcp,,8080,,80"
+cd Healthcare-Security-Analysis-MLE-Extension\SystemArchitecture\ClientGUI"
+dotnet build
 ```
 
-### Part 3: Windows Client Setup
+#### Step 2: Update Server URL (if needed)
 
-#### 3.1 Build the Client (On Ubuntu VM)
-
-```bash
-cd ~/Healthcare-Security-Analysis-MLE/SystemArchitecture/Server
-
-# Edit Program.cs to set server URL
-nano ~/Healthcare-Security-Analysis-MLE/Client/Program.cs
-```
-
-Find line 134 and change:
-```csharp
-client.BaseAddress = new Uri("https://mle.isot.ca/");
-```
-
-To:
+If your server is not at `localhost:8080`, edit `MainForm.cs` and find:
 ```csharp
 client.BaseAddress = new Uri("http://localhost:8080/");
 ```
 
-Save and compile:
+Change to your server's address (e.g., `http://192.168.1.100:8080/` if using bridged networking).
 
-```bash
-cd ~/Healthcare-Security-Analysis-MLE/Client
-dotnet publish --configuration Release -r win-x64 --self-contained true -p:PublishSingleFile=false
-
-# Copy SEAL native library
-cp /home/$USER/.nuget/packages/microsoft.research.sealnet/3.5.8/runtimes/win10-x64/sealc.dll ./bin/Release/netcoreapp3.1/win-x64/publish/
-
-# Create zip package
-cd ./bin/Release/netcoreapp3.1/win-x64/publish/
-zip -r MLE_Complete.zip .
-
-# Copy to web server for download
-sudo cp MLE_Complete.zip /var/www/MLE/wwwroot/DownloadableFiles/
-```
-
-#### 3.2 Download Client on Windows
-
-From your Windows browser, go to:
-```
-http://localhost:8080/DownloadableFiles/MLE_Complete.zip
-```
-
-Extract to a folder like `C:\MLE_Testing\`
-
-Rename `CDTS_PROJECT.exe` to `MLE.exe`
-
-## Usage
-
-### 1. Prepare Your CSV Data
-
-Create a CSV file with **no headers**, where:
-- Each row = one sample
-- Each column = one feature
-- Features must match the model's expected count (check with MongoDB)
-
-Example for the genomic model (1835 features):
-```
-0.123,0.456,0.789,...(1835 values total)
-0.234,0.567,0.890,...(1835 values total)
-```
-
-### 2. Run the Client
-
-**On Windows:**
+#### Step 3: Run the GUI
 
 ```cmd
-cd C:\MLE_Testing
-MLE.exe
+dotnet run
 ```
 
-When prompted:
-```
-Enter the name of the CSV containing the samples to be encrypted: yourdata.csv
+Or build a standalone executable:
+```cmd
+dotnet publish --configuration Release -r win-x64 --self-contained true
 ```
 
-Results will be saved to `Result.csv` in the same directory.
+Then run the `.exe` from `bin\Release\netcoreapp3.1\win-x64\publish\`
+
+#### Step 4: Use the GUI
+
+1. Select mode: Healthcare, Business (Financial), or Academic
+2. Select model: LogisticRegression
+3. Click "Browse..." and select your CSV file
+4. Click "Process Encrypted ML"
+5. Results will be saved to `Result.csv` in the same directory as your input file
+
+### Option B: Console Client (Original)
+
+#### Step 1: Build the Console Client
+
+```cmd
+cd "C:\Users\Chris\OneDrive\Desktop\Healthcare-Security-Analysis-MLE-Extension\SystemArchitecture\Client"
+dotnet build
+```
+
+#### Step 2: Update Server URL (if needed)
+
+Edit `Program.cs` and find:
+```csharp
+client.BaseAddress = new Uri("http://localhost:8080/");
+```
+
+Change to your server's address if needed.
+
+#### Step 3: Run the Console Client
+
+```cmd
+dotnet run
+```
+
+When prompted, enter the name of your CSV file.
+
+---
+
+## Part 3: Preparing Test Data
+
+### For Healthcare (1835 features)
+You need genomic data with 1835 features per sample. Use the original data or generate test data.
+
+### For Financial Fraud Detection (10 features)
+
+On Windows or Ubuntu:
+
+```bash
+cd DataGenerators
+python generate_financial_data.py
+```
+
+This creates `financial_features.csv` with 10 features per transaction.
+
+**To create a test file for inference** (not training):
+```python
+import pandas as pd
+import numpy as np
+
+# Generate a few test samples
+test_data = np.random.rand(5, 10)  # 5 samples, 10 features
+pd.DataFrame(test_data).to_csv("test_financial.csv", header=False, index=False)
+```
+
+### For Academic Grade Prediction (10 features)
+
+```bash
+cd DataGenerators
+python generate_academic_data.py
+```
+
+This creates `academic_features.csv` with 10 features per student.
+
+**To create a test file for inference**:
+```python
+import pandas as pd
+import numpy as np
+
+# Generate a few test samples
+test_data = np.random.rand(5, 10)  # 5 samples, 10 features
+pd.DataFrame(test_data).to_csv("test_academic.csv", header=False, index=False)
+```
+
+---
+
+## Part 4: Running the System
+
+### Complete Workflow Example: Financial Fraud Detection
+
+1. **On Ubuntu Server:**
+   ```bash
+   # Generate data
+   cd ~/Healthcare-Security-Analysis-MLE-Extension/DataGenerators
+   python3 generate_financial_data.py
+   
+   # Train model
+   cd ../ModelTraining
+   python3 train_financial_model.py
+   
+   # Load model
+   cd ../SystemArchitecture/configDB
+   cp ../../ModelTraining/coefs.csv .
+   # Edit loadModelFromCsv.py: modelName = "FinancialFraud"
+   python3 loadModelFromCsv.py
+   
+   # Verify model is loaded
+   mongo models --eval "db.models.find({}, {Type:1, NWeights:1}).pretty()"
+   ```
+
+2. **On Windows Client:**
+   ```cmd
+   # Create test data (or use existing)
+   cd DataGenerators
+   python generate_financial_data.py
+   
+   # Run GUI
+   cd ..\SystemArchitecture\ClientGUI
+   dotnet run
+   ```
+
+3. **In the GUI:**
+   - Select mode: "Business (Financial)"
+   - Select model: "LogisticRegression"
+   - Browse to: `DataGenerators\financial_features.csv`
+   - Click "Process Encrypted ML"
+   - Check `Result.csv` for predictions
+
+---
 
 ## Troubleshooting
 
 ### Server Issues
 
-**Check service logs:**
+**Check if server is running:**
+```bash
+sudo systemctl status MLE.service
+```
+
+**Check server logs:**
 ```bash
 sudo journalctl -u MLE.service -n 50 --no-pager
 ```
 
-**Check nginx logs:**
+**Check MongoDB:**
 ```bash
-sudo tail -f /var/log/nginx/error.log
+sudo systemctl status mongod
+mongo models --eval "db.models.find().pretty()"
 ```
 
 **Restart services:**
@@ -319,104 +421,95 @@ sudo systemctl restart MLE.service
 sudo systemctl restart nginx
 ```
 
-### MongoDB Issues
+### Client Issues
 
-**Check MongoDB status:**
+**"Connection failed" Error:**
+- Verify server is running: `curl http://localhost:8080` (on Ubuntu)
+- Check port forwarding is configured (if using NAT)
+- Verify firewall allows port 8080
+- Check server URL in client code matches your setup
+
+**"Model not found" Error:**
+- Ensure model is loaded in MongoDB
+- Check model name matches exactly (case-sensitive)
+- Verify you're using the correct model name in the client
+
+**"Feature count mismatch" Error:**
+- Check your CSV has the correct number of features
+- Healthcare: 1835 features
+- Financial: 10 features
+- Academic: 10 features
+
+**GUI Won't Start:**
+- Ensure .NET Core 3.1 SDK is installed on Windows
+- Try building from command line: `dotnet build`
+- Check for error messages in the console
+
+---
+
+## Quick Reference
+
+### Server Commands (Ubuntu)
 ```bash
+# Start services
+sudo systemctl start mongod
+sudo systemctl start MLE.service
+sudo systemctl start nginx
+
+# Stop services
+sudo systemctl stop MLE.service
+sudo systemctl stop mongod
+
+# Check status
+sudo systemctl status MLE.service
 sudo systemctl status mongod
+
+# View logs
+sudo journalctl -u MLE.service -f
 ```
 
-**View models in database:**
-```bash
-mongo models --eval "db.models.find().pretty()"
+### Client Commands (Windows)
+```cmd
+# Build GUI
+cd SystemArchitecture\ClientGUI
+dotnet build
+dotnet run
+
+# Build Console
+cd SystemArchitecture\Client
+dotnet build
+dotnet run
 ```
 
-**Reload model:**
+### Model Management
 ```bash
-cd ~/Healthcare-Security-Analysis-MLE/SystemArchitecture/configDB
+# List all models in MongoDB
+mongo models --eval "db.models.find({}, {Type:1, NWeights:1}).pretty()"
+
+# Remove a model
+mongo models --eval "db.models.deleteOne({Type: 'FinancialFraud'})"
+
+# Load a new model
+cd SystemArchitecture/configDB
+# Edit loadModelFromCsv.py with correct modelName
 python3 loadModelFromCsv.py
 ```
 
-### Client Issues
+---
 
-**Error: "Unable to load DLL 'sealc'"**
-- Ensure `sealc.dll` is in the same directory as `MLE.exe`
+## Summary
 
-**Error: "Connection failed"**
-- Verify server is running: `curl http://localhost:8080`
-- Check port forwarding is configured
-- Verify firewall allows port 8080
+**Server (Ubuntu):**
+1. Install dependencies (.NET, MongoDB, nginx)
+2. Train models (optional - can use pre-trained)
+3. Load models into MongoDB
+4. Build and deploy server
+5. Start services
 
-**Error: "Request Entity Too Large"**
-- Server nginx config has `client_max_body_size 100M;`
-- Reduce dataset size or increase limit further
+**Client (Windows):**
+1. Build GUI or console client
+2. Update server URL if needed
+3. Prepare test CSV files
+4. Run and process data
 
-**Error: "InternalServerError"**
-- Check server logs for details
-- Verify MongoDB is running and has model loaded
-- Ensure CSV feature count matches model's `NWeights`
-
-## Testing with Financial Data
-
-To test with financial fraud detection data instead of genomics:
-
-1. **Generate test data** using the provided dataset generator
-2. **Train a new model** with 10 financial features
-3. **Load the financial model** into MongoDB
-4. **Run predictions** on financial CSV data
-
-See `docs/FINANCIAL_MODEL.md` for detailed instructions (if available).
-
-## Project Structure
-
-```
-Healthcare-Security-Analysis-MLE/
-├── SystemArchitecture/
-│   ├── Server/              # .NET Core server application
-│   ├── Client/              # Windows client application
-│   └── configDB/            # MongoDB model loading scripts
-├── ModelTraining/           # ML model training scripts
-│   ├── feature_table.csv   # Genomic training data
-│   ├── Y.csv               # Labels
-│   └── compareModels.py    # Model training script
-└── README.md               # This file
-```
-
-## Security Considerations
-
-- Data is encrypted client-side using homomorphic encryption
-- Server never sees unencrypted data
-- Suitable for HIPAA, GDPR, PCI-DSS compliance scenarios
-- Network traffic should use HTTPS in production (not implemented in this demo)
-
-## Citation
-
-If you use this framework in your research, please cite:
-
-```bibtex
-@Article{Briguglio2021MachineLearningPrecisionMedicine-arxiv,
-  author = {William Briguglio and Parisa Moghaddam and Waleed A. Yousef and Issa Traore and Mohammad Mamun},
-  title = {Machine Learning in Precision Medicine to Preserve Privacy via Encryption},
-  journal = {arXiv Preprint, arXiv:2102.03412},
-  year = 2021,
-  url = {https://github.com/isotlaboratory/Healthcare-Security-Analysis-MLE},
-  primaryclass = {cs.LG}
-}
-```
-
-## License
-
-GPL-3.0 License - See LICENSE file for details
-
-## Contributors
-
-- Original Research Team (see paper)
-- [Your Name] - Setup and Documentation
-
-## Support
-
-For issues or questions:
-1. Check the Troubleshooting section above
-2. Review server logs
-3. Open an issue on GitHub
-4. Contact: [your-email@example.com]
+The system is now ready to perform encrypted machine learning inference!
