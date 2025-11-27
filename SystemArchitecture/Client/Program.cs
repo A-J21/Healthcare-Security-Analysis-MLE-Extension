@@ -7,7 +7,7 @@ using Microsoft.Research.SEAL;
 using CDTS_PROJECT.Logics;
 using System.IO;
 using System.Collections.Generic;
-using System.Runtime.Serialization.Formatters.Binary;
+// using System.Runtime.Serialization.Formatters.Binary; // no longer used
 using System.Text;
 
 namespace CDTS_PROJECT
@@ -85,11 +85,11 @@ namespace CDTS_PROJECT
             encryptedFeatureValuesStream.Seek(0, SeekOrigin.Begin); // Reset to start of stream
             StreamContent encryptedFeatureValuesStreamContent = new StreamContent(encryptedFeatureValuesStream);
 
-            // Serialize columnSizes: Convert the array of sizes to bytes
-            // The server needs this to know how to read the encrypted data back
-            MemoryStream columnSizesStream = new MemoryStream();
-            BinaryFormatter formatter = new BinaryFormatter(); // Used to convert objects to bytes
-            formatter.Serialize(columnSizesStream, columnSizes); // Write the array to the stream
+            // Serialize columnSizes as a UTF-8 comma-separated string
+            // The server will parse this string back into a long[]
+            string sizesStr = string.Join(",", columnSizes);
+            byte[] sizesBytes = Encoding.UTF8.GetBytes(sizesStr);
+            MemoryStream columnSizesStream = new MemoryStream(sizesBytes);
             columnSizesStream.Seek(0, SeekOrigin.Begin);
             StreamContent columnSizesStreamContent = new StreamContent(columnSizesStream);
 
@@ -103,7 +103,8 @@ namespace CDTS_PROJECT
             // Send the POST request to the server
             // The server endpoint is "api/encryptedML" and we specify which model to use
             // Currently hardcoded to "LogisticRegression" but could be made user-selectable
-            var response = await client.PostAsync("api/encryptedML?modelname=LogisticRegression", content); //model name will be selected by user in future versions
+            // For end-to-end encrypted testing use the server test endpoint that accepts multipart encrypted data
+            var response = await client.PostAsync("api/test/TestEncrypted", content);
 
             // Check if the request was successful
             if (response.StatusCode != HttpStatusCode.OK){
@@ -131,7 +132,11 @@ namespace CDTS_PROJECT
             
             // Step 3: Read the sizes array (tells us how many bytes each encrypted result takes)
             MemoryStream tempStream = new MemoryStream(reader.ReadBytes((int)lengthOfWeightedSumSizes));
-            long[] weightSumSizes = (long[]) formatter.Deserialize(tempStream); // Convert bytes back to array
+            tempStream.Seek(0, SeekOrigin.Begin);
+            // Sizes are sent as a UTF-8 comma-separated string
+            string sizesStrResp = Encoding.UTF8.GetString(tempStream.ToArray());
+            var partsResp = sizesStrResp.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            long[] weightSumSizes = Array.ConvertAll(partsResp, s => long.Parse(s));
             tempStream.Close();
 
             // Step 4: Read the actual encrypted results data
@@ -170,6 +175,90 @@ namespace CDTS_PROJECT
         /// 8. Save results to CSV file
         static async Task RunAsync()
         {
+            // Enable BinaryFormatter for this test harness (required on newer .NET versions)
+            // NOTE: BinaryFormatter is insecure for untrusted data; this switch is used here
+            // to allow the existing serialization logic to run in this local test environment.
+            AppContext.SetSwitch("Switch.System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization", true);
+            // If invoked with --local-test, run an in-process encrypted operations test
+            var args = Environment.GetCommandLineArgs();
+            if (args.Length > 1 && args[1] == "--local-test")
+            {
+                Console.WriteLine("Running local encrypted compute test (no HTTP)...");
+                // Create keys
+                var localKeyPair = keyManager.CreateKeys();
+                using PublicKey pubKey = localKeyPair.publicKey;
+                using SecretKey secKey = localKeyPair.secretKey;
+
+                // Use a small test CSV by default (relative to repo root)
+                string testCsv = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "DataGenerators", "test_financial_small.csv"));
+                if (!File.Exists(testCsv))
+                {
+                    Console.WriteLine("Test CSV not found: " + testCsv);
+                    return;
+                }
+
+                // Read, encrypt
+                var featureList = Logics.EncryptedMLHelper.ReadValuesToList(testCsv);
+                var encryptedFeatureValues = Logics.EncryptedMLHelper.encryptValues(featureList, pubKey, contextManager.Context);
+
+                // Load model coefficients from ModelTraining/coefs.csv
+                string coefsPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "ModelTraining", "coefs.csv"));
+                if (!File.Exists(coefsPath))
+                {
+                    Console.WriteLine("coefs.csv not found: " + coefsPath);
+                    return;
+                }
+                string line = File.ReadAllText(coefsPath).Trim();
+                string[] parts = line.Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                double[] weights = Array.ConvertAll(parts, s => double.Parse(s));
+
+                // Build model parameters (single-class logistic regression)
+                int precision = 1000;
+                int n_weights = weights.Length;
+                var weightList = new System.Collections.Generic.List<double[]>() { weights };
+
+                // Perform encrypted computation in-process (simulate server)
+                var encoder = new IntegerEncoder(contextManager.Context);
+                var evaluator = new Evaluator(contextManager.Context);
+
+                var weightedSums = new System.Collections.Generic.List<System.Collections.Generic.List<Ciphertext>>();
+
+                foreach (var sample in encryptedFeatureValues)
+                {
+                    if (sample.Count != n_weights)
+                    {
+                        Console.WriteLine($"Feature count mismatch: {sample.Count} vs expected {n_weights}");
+                        return;
+                    }
+                    var sampleSums = new System.Collections.Generic.List<Ciphertext>();
+                    foreach (var classWeights in weightList)
+                    {
+                        var weightedFeatures = new System.Collections.Generic.List<Ciphertext>();
+                        for (int i = 0; i < sample.Count; i++)
+                        {
+                            long curWeight = (long)(classWeights[i] * precision);
+                            if (curWeight == 0) continue;
+                            var scaled = encoder.Encode(curWeight);
+                            var weighted = new Ciphertext();
+                            evaluator.MultiplyPlain(sample[i], scaled, weighted);
+                            weightedFeatures.Add(weighted);
+                        }
+                        var sum = new Ciphertext();
+                        evaluator.AddMany(weightedFeatures, sum);
+                        sampleSums.Add(sum);
+                    }
+                    weightedSums.Add(sampleSums);
+                }
+
+                // Decrypt results
+                var results = Logics.EncryptedMLHelper.decryptValues(weightedSums, secKey, contextManager.Context);
+                Console.WriteLine("Decrypted weighted sums (per sample):");
+                foreach (var row in results)
+                {
+                    Console.WriteLine(string.Join(",", row));
+                }
+                return;
+            }
             // Step 1: Create a new pair of encryption keys for this session
             // Public key: Can be shared (used for encryption)
             // Secret key: Must stay secret (used for decryption)
@@ -212,9 +301,17 @@ namespace CDTS_PROJECT
             // Wrap everything in try-catch to handle errors gracefully shout out Dr. Lehr
             try
             {
-                // Step 2: Get the CSV filename from the user
-                Console.Write("\tEnter the name of the CSV containing the samples to be encrypted: ");
-                FileName = Console.ReadLine();
+                // Step 2: Get the CSV filename from the user or command-line argument
+                // If a CLI argument was provided (and it's not the --local-test flag), use it
+                if (args.Length > 1 && args[1] != "--local-test")
+                {
+                    FileName = args[1];
+                }
+                else
+                {
+                    Console.Write("\tEnter the name of the CSV containing the samples to be encrypted: ");
+                    FileName = Console.ReadLine();
+                }
 
                 // Step 3: Validate that it's a CSV file
                 string fileExtension = Path.GetExtension(FileName);
@@ -225,9 +322,16 @@ namespace CDTS_PROJECT
                 }
 
                 // Step 4: Build the full file path and check if the file exists
-                string filePath = Path.GetFullPath(Directory.GetCurrentDirectory()) + "\\"+  FileName;
-                if ( ! File.Exists(filePath)){
-                    throw new Exception("File "+filePath+" does not exists.");
+                string filePath = FileName;
+                if (!Path.IsPathRooted(filePath))
+                {
+                    filePath = Path.Combine(Directory.GetCurrentDirectory(), FileName);
+                }
+                filePath = Path.GetFullPath(filePath);
+
+                if (!File.Exists(filePath))
+                {
+                    throw new Exception("File " + filePath + " does not exists.");
                 }
                 
                 // Step 5: Read the CSV file and convert it to a 2D list of floats
@@ -241,7 +345,8 @@ namespace CDTS_PROJECT
 
                 // Step 7: Configure the HTTP client to connect to the server
                 // Change this URL to match your server's address
-                client.BaseAddress = new Uri("http://localhost:8080/");
+                // Use port 5000 by default since the server was started on that port during testing
+                client.BaseAddress = new Uri("http://localhost:5000/");
                 client.DefaultRequestHeaders.Accept.Clear();
             
 
