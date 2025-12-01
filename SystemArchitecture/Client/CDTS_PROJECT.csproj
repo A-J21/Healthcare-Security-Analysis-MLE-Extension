@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
 
     <!-- Modern defaults -->
     <ImplicitUsings>enable</ImplicitUsings>
@@ -11,10 +11,6 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>SYSLIB0011</NoWarn>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Folder Include="Logics\" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.7" />

@@ -217,14 +217,14 @@ namespace MLE_GUI.Services
             {
                 instructions = "\n\nTo create the FinancialFraud model:\n" +
                     "1. cd ModelTraining\n" +
-                    "2. python train_financial_model.py\n" +
+                    "2. python train_financial_model_new.py\n" +
                     "3. Copy coefs.csv to SystemArchitecture/configDB/FinancialFraud/coefs.csv";
             }
             else if (modelType == "AcademicGrade")
             {
                 instructions = "\n\nTo create the AcademicGrade model:\n" +
                     "1. cd ModelTraining\n" +
-                    "2. python train_academic_model.py\n" +
+                    "2. python train_academic_model_new.py\n" +
                     "3. Copy coefs.csv to SystemArchitecture/configDB/AcademicGrade/coefs.csv";
             }
             
