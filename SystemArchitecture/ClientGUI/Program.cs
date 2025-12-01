@@ -11,7 +11,8 @@ namespace MLE_GUI
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+            // Application.Run(new MainForm());
+            Application.Run(new MainFormModern()); //Updated version of the GUI
         }
     }
 }
