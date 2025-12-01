@@ -4,11 +4,8 @@ using System.IO;
 using System.Threading.Tasks;
 using CDTS_PROJECT.Logics;
 using Microsoft.Research.SEAL;
-using System.Net.Http;
-using System.Net;
 using System.Collections.Generic;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Text;
+using MLE_GUI.Services;
 
 namespace MLE_GUI
 {
@@ -42,7 +39,7 @@ namespace MLE_GUI
         // Core components (same as console client)
         private ContextManager contextManager;
         private KeyManager keyManager;
-        private HttpClient client;
+        private LocalMLService localMLService;
         
         // Selected file path
         private string selectedFilePath = "";
@@ -54,18 +51,48 @@ namespace MLE_GUI
         }
         
         /// <summary>
-        /// InitializeCoreComponents: Sets up encryption components.
+        /// InitializeCoreComponents: Sets up encryption components and local ML service.
         /// </summary>
         private void InitializeCoreComponents()
         {
             // Initialize encryption context and key manager (same as console client)
             contextManager = new ContextManager();
             keyManager = new KeyManager(contextManager);
-            client = new HttpClient();
             
-            // Set default server address (can be changed in settings)
-            client.BaseAddress = new Uri("http://localhost:8080/");
-            client.DefaultRequestHeaders.Accept.Clear();
+            // Initialize local ML service (replaces HTTP client)
+            // This service performs ML inference locally without needing a separate server
+            localMLService = new LocalMLService();
+            
+            // Update model list based on available models
+            UpdateModelList();
+        }
+        
+        /// <summary>
+        /// UpdateModelList: Updates the model combo box with available models.
+        /// </summary>
+        private void UpdateModelList()
+        {
+            try
+            {
+                var availableModels = localMLService.GetAvailableModels();
+                modelComboBox.Items.Clear();
+                foreach (var modelName in availableModels)
+                {
+                    modelComboBox.Items.Add(modelName);
+                }
+                if (modelComboBox.Items.Count > 0)
+                {
+                    modelComboBox.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                // If models can't be loaded, keep default
+                modelComboBox.Items.Clear();
+                modelComboBox.Items.Add("LogisticRegression");
+                modelComboBox.SelectedIndex = 0;
+                UpdateStatus($"Warning: Could not load models: {ex.Message}");
+            }
         }
         
         /// <summary>
@@ -73,8 +100,8 @@ namespace MLE_GUI
         /// </summary>
         private void InitializeComponent()
         {
-            this.Text = "Machine Learning with Encryption (MLE)";
-            this.Size = new System.Drawing.Size(800, 600);
+            this.Text = "Machine Learning with Encryption (MLE) - Local Mode";
+            this.Size = new System.Drawing.Size(900, 650);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -199,13 +226,24 @@ namespace MLE_GUI
             // Instructions
             Label instructionsLabel = new Label
             {
-                Text = "Instructions: 1) Select mode 2) Select model 3) Choose CSV file 4) Click Process",
+                Text = "Instructions: 1) Select mode 2) Select model 3) Choose CSV file 4) Click Process | Running locally - no server required!",
                 Location = new System.Drawing.Point(20, 540),
-                Size = new System.Drawing.Size(750, 20),
+                Size = new System.Drawing.Size(850, 20),
                 Font = new System.Drawing.Font("Arial", 8),
                 ForeColor = System.Drawing.Color.Gray
             };
             this.Controls.Add(instructionsLabel);
+            
+            // Add info label about local processing
+            Label infoLabel = new Label
+            {
+                Text = "✓ All processing runs locally on this machine - encryption, ML inference, and decryption",
+                Location = new System.Drawing.Point(20, 560),
+                Size = new System.Drawing.Size(850, 20),
+                Font = new System.Drawing.Font("Arial", 8, System.Drawing.FontStyle.Italic),
+                ForeColor = System.Drawing.Color.DarkGreen
+            };
+            this.Controls.Add(infoLabel);
         }
         
         /// <summary>
@@ -213,11 +251,38 @@ namespace MLE_GUI
         /// </summary>
         private void ModeComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            // Update model list based on mode
-            // In a full implementation, you could query the server for available models
-            modelComboBox.Items.Clear();
-            modelComboBox.Items.Add("LogisticRegression");
-            modelComboBox.SelectedIndex = 0;
+            // Update model list based on available models from local service
+            UpdateModelList();
+            
+            // Auto-select the appropriate model based on mode
+            string selectedMode = modeComboBox.SelectedItem?.ToString() ?? "";
+            string targetModel = "";
+            
+            if (selectedMode.Contains("Financial") || selectedMode.Contains("Business"))
+            {
+                targetModel = "FinancialFraud";
+            }
+            else if (selectedMode.Contains("Academic"))
+            {
+                targetModel = "AcademicGrade";
+            }
+            else if (selectedMode.Contains("Healthcare"))
+            {
+                targetModel = "LogisticRegression";
+            }
+            
+            // Try to select the target model if it's available
+            if (!string.IsNullOrEmpty(targetModel))
+            {
+                for (int i = 0; i < modelComboBox.Items.Count; i++)
+                {
+                    if (modelComboBox.Items[i].ToString() == targetModel)
+                    {
+                        modelComboBox.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
             
             UpdateStatus($"Mode changed to: {modeComboBox.SelectedItem}");
         }
@@ -264,7 +329,7 @@ namespace MLE_GUI
             {
                 UpdateStatus("Starting encrypted ML processing...");
                 AddStatusText("=" + new string('=', 60) + "\n");
-                AddStatusText("Machine Learning with Encryption\n");
+                AddStatusText("Machine Learning with Encryption (Local Mode)\n");
                 AddStatusText("=" + new string('=', 60) + "\n\n");
                 
                 // Step 1: Create encryption keys
@@ -277,7 +342,45 @@ namespace MLE_GUI
                 // Step 2: Read CSV file
                 AddStatusText("Step 2: Reading CSV file...\n");
                 List<List<float>> featureList = EncryptedMLHelper.ReadValuesToList(selectedFilePath);
-                AddStatusText($"   ✓ Loaded {featureList.Count} samples with {featureList[0].Count} features\n\n");
+                
+                if (featureList.Count == 0)
+                {
+                    throw new Exception("CSV file is empty or could not be read.");
+                }
+                
+                int featureCount = featureList[0].Count;
+                AddStatusText($"   ✓ Loaded {featureList.Count} samples with {featureCount} features\n");
+                
+                // Validate feature count consistency
+                for (int i = 1; i < featureList.Count; i++)
+                {
+                    if (featureList[i].Count != featureCount)
+                    {
+                        throw new Exception($"Inconsistent feature count: Sample 0 has {featureCount} features, but sample {i} has {featureList[i].Count} features.");
+                    }
+                }
+                
+                // Get model info for validation
+                string modelName = modelComboBox.SelectedItem?.ToString() ?? "LogisticRegression";
+                try
+                {
+                    string modelInfo = localMLService.GetModelInfo(modelName);
+                    AddStatusText($"   Model: {modelInfo}\n");
+                    
+                    // Check if feature counts match
+                    var availableModels = localMLService.GetAvailableModels();
+                    if (availableModels.Contains(modelName))
+                    {
+                        // We'll validate this later, but show a warning if mismatch
+                        AddStatusText($"   ⚠ Make sure your CSV has the correct number of features!\n");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AddStatusText($"   ⚠ Warning: {ex.Message}\n");
+                }
+                
+                AddStatusText("\n");
                 
                 // Step 3: Encrypt data
                 AddStatusText("Step 3: Encrypting data...\n");
@@ -285,12 +388,30 @@ namespace MLE_GUI
                     EncryptedMLHelper.encryptValues(featureList, publicKey, contextManager.Context);
                 AddStatusText($"   ✓ Encrypted {encryptedFeatureValues.Count} samples\n\n");
                 
-                // Step 4: Send to server
-                AddStatusText("Step 4: Sending encrypted data to server...\n");
-                string modelName = modelComboBox.SelectedItem.ToString();
+                // Step 4: Perform encrypted ML inference locally
+                AddStatusText("Step 4: Performing encrypted ML inference...\n");
+                
+                // Validate model requirements before processing
+                try
+                {
+                    // This will throw if model not found, but we want to catch it with a better message
+                    var availableModels = localMLService.GetAvailableModels();
+                    if (!availableModels.Contains(modelName))
+                    {
+                        throw new Exception($"Model '{modelName}' not found. Available models: {string.Join(", ", availableModels)}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception($"Model validation failed: {ex.Message}");
+                }
+                
+                AddStatusText($"   Using model: {modelName}\n");
+                AddStatusText($"   Input features: {featureList[0].Count}\n");
+                
                 List<List<Ciphertext>> encryptedWeightedSums = 
-                    await GetPredictionsAsync(encryptedFeatureValues, modelName);
-                AddStatusText("   ✓ Received encrypted predictions from server\n\n");
+                    await localMLService.GetPredictionsAsync(encryptedFeatureValues, modelName);
+                AddStatusText("   ✓ Encrypted predictions computed successfully\n\n");
                 
                 // Step 5: Decrypt results
                 AddStatusText("Step 5: Decrypting results...\n");
@@ -299,7 +420,8 @@ namespace MLE_GUI
                 
                 // Step 6: Save results
                 AddStatusText("Step 6: Saving results...\n");
-                string outputPath = Path.Combine(Path.GetDirectoryName(selectedFilePath), "Result.csv");
+                string? directory = Path.GetDirectoryName(selectedFilePath);
+                string outputPath = Path.Combine(directory ?? Directory.GetCurrentDirectory(), "Result.csv");
                 using (StreamWriter file = new StreamWriter(outputPath))
                 {
                     foreach (var sample in results)
@@ -344,66 +466,6 @@ namespace MLE_GUI
             }
         }
         
-        /// <summary>
-        /// GetPredictionsAsync: Sends encrypted data to server and receives encrypted predictions.
-        /// (Same logic as console client's getPredictions method)
-        /// </summary>
-        private async Task<List<List<Ciphertext>>> GetPredictionsAsync(
-            List<List<Ciphertext>> encryptedFeatureValues, string modelName)
-        {
-            // Serialize encrypted data
-            MemoryStream encryptedFeatureValuesStream = new MemoryStream();
-            long[] columnSizes = EncryptedMLHelper.convert2DCipherListToStream(
-                encryptedFeatureValues, encryptedFeatureValuesStream);
-            encryptedFeatureValuesStream.Seek(0, SeekOrigin.Begin);
-            StreamContent encryptedFeatureValuesStreamContent = new StreamContent(encryptedFeatureValuesStream);
-            
-            // Serialize column sizes
-            MemoryStream columnSizesStream = new MemoryStream();
-            BinaryFormatter formatter = new BinaryFormatter();
-            formatter.Serialize(columnSizesStream, columnSizes);
-            columnSizesStream.Seek(0, SeekOrigin.Begin);
-            StreamContent columnSizesStreamContent = new StreamContent(columnSizesStream);
-            
-            // Create multipart form
-            var content = new MultipartFormDataContent();
-            content.Add(encryptedFeatureValuesStreamContent, "encryptedFeatureValues");
-            content.Add(columnSizesStreamContent, "columnSizes");
-            
-            // Send request
-            var response = await client.PostAsync($"api/encryptedML?modelname={modelName}", content);
-            
-            if (response.StatusCode != HttpStatusCode.OK)
-            {
-                string badResponseContent = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Response Status Code: {response.StatusCode}\nResponse Message: {badResponseContent}");
-            }
-            
-            // Read response
-            var responseContent = await response.Content.ReadAsStreamAsync();
-            
-            // Parse response (same as console client)
-            responseContent.Seek(-8, SeekOrigin.End);
-            BinaryReader reader = new BinaryReader(responseContent);
-            UInt64 sizeOfEncryptedWeightedSums = reader.ReadUInt64();
-            
-            responseContent.Seek((long)sizeOfEncryptedWeightedSums, SeekOrigin.Begin);
-            UInt64 lengthOfWeightedSumSizes = (UInt64)responseContent.Length - (sizeOfEncryptedWeightedSums + 8);
-            
-            MemoryStream tempStream = new MemoryStream(reader.ReadBytes((int)lengthOfWeightedSumSizes));
-            long[] weightSumSizes = (long[])formatter.Deserialize(tempStream);
-            tempStream.Close();
-            
-            responseContent.Seek(0, SeekOrigin.Begin);
-            tempStream = new MemoryStream(reader.ReadBytes((int)sizeOfEncryptedWeightedSums));
-            tempStream.Seek(0, SeekOrigin.Begin);
-            
-            List<List<Ciphertext>> encryptedWeightedSums = 
-                EncryptedMLHelper.extract2DCipherListFromStream(tempStream, weightSumSizes, contextManager.Context);
-            tempStream.Close();
-            
-            return encryptedWeightedSums;
-        }
         
         /// <summary>
         /// UpdateStatus: Updates the status label.

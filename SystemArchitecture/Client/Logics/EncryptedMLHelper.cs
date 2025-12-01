@@ -173,22 +173,62 @@ namespace CDTS_PROJECT.Logics
             // Open the CSV file for reading
             using StreamReader reader = new StreamReader(csvPath);
             
+            int lineNumber = 0;
             // Read line by line until we reach the end of the file
             while (!reader.EndOfStream)
             {
+                lineNumber++;
                 // Read one line (one sample)
-                String line = reader.ReadLine();
+                String? line = reader.ReadLine();
                 
-                // Split the line by commas and convert each part to a float
-                // Example: "0.123,0.456,0.789" becomes [0.123, 0.456, 0.789]
-                float[] values = Array.ConvertAll(line.Split(','), float.Parse);
+                // Skip empty lines
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
                 
-                // Convert the array to a List (easier to work with)
+                // Trim whitespace and split by commas
+                line = line.Trim();
+                
+                // Split the line by commas and filter out empty strings
+                string[] parts = line.Split(',');
+                List<string> validParts = new List<string>();
+                foreach (string part in parts)
+                {
+                    string trimmed = part.Trim();
+                    if (!string.IsNullOrEmpty(trimmed))
+                    {
+                        validParts.Add(trimmed);
+                    }
+                }
+                
+                if (validParts.Count == 0)
+                {
+                    continue; // Skip lines with no valid data
+                }
+                
+                // Convert each part to a float
                 List<float> featureList = new List<float>();
-                foreach (float value in values) featureList.Add(value);
+                for (int i = 0; i < validParts.Count; i++)
+                {
+                    try
+                    {
+                        float value = float.Parse(validParts[i]);
+                        featureList.Add(value);
+                    }
+                    catch (FormatException)
+                    {
+                        throw new Exception($"Invalid number format on line {lineNumber}, column {i + 1}: '{validParts[i]}'. Expected a numeric value.");
+                    }
+                }
                 
                 // Add this sample to our list
                 list.Add(featureList);
+            }
+
+            if (list.Count == 0)
+            {
+                throw new Exception("CSV file appears to be empty or contains no valid data.");
             }
 
             // Return the 2D list of all samples
