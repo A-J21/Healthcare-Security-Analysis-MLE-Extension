@@ -12,7 +12,30 @@ using MLE_GUI.Services;
 
 namespace MLE_GUI
 {
-    // Modernized MainForm with step-by-step visualization of the encrypted ML process.
+    /// MainFormModern: Modernized Windows Forms GUI for Machine Learning with Encryption (MLE).
+    /// 
+    /// PURPOSE:
+    /// This form provides an interactive, step-by-step interface that visualizes the entire
+    /// encrypted machine learning workflow. It guides users through six distinct steps:
+    /// 1. Mode Selection - Choose application domain (Healthcare, Financial, Academic)
+    /// 2. File Selection - Load CSV data file for prediction
+    /// 3. Encryption - Generate keys and encrypt data using homomorphic encryption
+    /// 4. Server Simulation - Perform ML inference on encrypted data (local simulation)
+    /// 5. Results Transmission - Visualize encrypted results being "transmitted"
+    /// 6. Decryption + Results - Decrypt predictions and view/save results
+    /// 
+    /// DESIGN PHILOSOPHY:
+    /// - Educational: Each step provides detailed information about what's happening, gives us a powerpoint while not having a powerpoint.
+    /// - Visual: Progress indicators, data previews, and flow visualizations
+    /// - Interactive: Users can move forward/backward through steps
+    /// - Secure: Demonstrates privacy-preserving ML without exposing actual data
+    /// 
+    /// ARCHITECTURE:
+    /// This form orchestrates the interaction between:
+    /// - ContextManager: Manages encryption parameters
+    /// - KeyManager: Generates encryption keys
+    /// - LocalMLService: Performs encrypted ML inference
+    /// - EncryptedMLHelper: Provides encryption/decryption utilities
     public class MainFormModern : Form
     {
         // Step panels
@@ -76,17 +99,43 @@ namespace MLE_GUI
         private List<List<Ciphertext>>? encryptedPredictions;
         private List<List<long>>? decryptedResults;
         
+        /// Constructor: Initializes the modern GUI form and sets up core components.
+        /// 
+        /// This constructor is called when the form is first created. It:
+        /// 1. Initializes all UI components (buttons, panels, labels, etc.)
+        /// 2. Sets up encryption and ML services
+        /// 3. Displays the first step (Mode Selection)
         public MainFormModern()
         {
+            // Initialize all UI components (defined in InitializeComponent method)
             InitializeComponent();
+            
+            // Set up core encryption and ML services needed for the workflow
             InitializeCoreComponents();
+            
+            // Start by showing Step 1 (Mode Selection)
             ShowStep(1);
         }
         
+        /// InitializeCoreComponents: Sets up the encryption and ML services.
+        /// 
+        /// These components are initialized once and reused throughout the application lifecycle.
+        /// They provide the core functionality for:
+        /// - Encryption context and parameters
+        /// - Key generation and management
+        /// - Local ML inference on encrypted data
         private void InitializeCoreComponents()
         {
+            // Initialize encryption context with BFV parameters
+            // This provides the encryption scheme settings used throughout the application
             contextManager = new ContextManager();
+            
+            // Initialize key manager for generating encryption keys
+            // Keys are generated fresh for each encryption session
             keyManager = new KeyManager(contextManager);
+            
+            // Initialize local ML service for encrypted inference
+            // This replaces the original server-based processing
             localMLService = new LocalMLService();
         }
         

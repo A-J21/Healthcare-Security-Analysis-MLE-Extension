@@ -53,6 +53,8 @@ All processing happens locally - no network calls, no server, no database!
 
 ### Step 1: Clone the Repository
 
+**Using Git (recommended):**
+
 ```bash
 git clone https://github.com/A-J21/Healthcare-Security-Analysis-MLE-Extension.git
 cd Healthcare-Security-Analysis-MLE-Extension
@@ -78,15 +80,14 @@ This will automatically download the SEAL encryption library and other dependenc
 
 ### Step 4: Build the Application
 
-```cmd
-dotnet build --configuration Release
-```
-
-Or build and run directly:
+**Build and Run Directly (for testing):**
 
 ```cmd
+cd SystemArchitecture\ClientGUI
 dotnet run
 ```
+
+**Note:** The first build may take a few minutes as it downloads dependencies. Subsequent builds are faster.
 
 ### Step 5: Verify Models are Available
 
@@ -283,8 +284,60 @@ Healthcare-Security-Analysis-MLE-Extension/
 - Suitable for HIPAA, GDPR, PCI-DSS compliance scenarios
 - **Note:** This is a demonstration system. For production use, consider additional security measures (HTTPS, secure key management, etc.)
 
-## Citation
-If you use this framework in your research, please cite:
+## Functionality Status
+
+### Working Features
+
+- **Complete GUI Workflow**: All 6 steps of the encrypted ML process work end-to-end
+- **Healthcare Model**: Cancer prediction using genomic data (10 features)
+- **Financial Model**: Fraud detection using transaction data (10 features)
+- **Academic Model**: Student at-risk prediction using academic indicators (10 features)
+- **Data Encryption**: Homomorphic encryption using BFV scheme (SEAL library)
+- **Encrypted ML Inference**: Logistic regression inference on encrypted data
+- **Data Decryption**: Decryption of prediction results using secret key
+- **CSV Import/Export**: Load data from CSV files and save results to CSV
+- **Model Training**: Python scripts for training new models on custom datasets
+- **Local Processing**: All operations run locally without server or database
+
+### Limitations / Known Issues
+- **Single Model Type**: Currently supports Logistic Regression only. Other model types (Random Forest, SVM) would require additional homomorphic operation implementations.
+- **Performance**: Homomorphic encryption is computationally intensive. Large datasets (>1000 samples) may take several minutes to process.
+- **Error Handling**: Some edge cases may not have comprehensive error messages
+- **Platform Support**: Currently Windows-only due to Windows Forms GUI. The encryption library (SEAL) supports cross-platform, but the GUI does not.
+
+### Not Working / Out of Scope
+- Network-based client-server deployment (intentionally removed for local-only operation)
+- Database integration (MongoDB functionality removed)
+- Real-time model updates without application restart
+- Model performance visualization/analytics
+- HTTPS/TLS network encryption (wasn't needed for local-only operation)
+
+## Academic References
+
+### Foundational Research (Prior Work)
+
+This project builds upon foundational research in privacy preserving machine learning and homomorphic encryption.  
+The foundational paper that established the feasibility of performing machine-learning inference directly on encrypted data is:
+
+**Dowlin, M., Gilad-Bachrach, R., Laine, K., Lauter, K., Naehrig, M., & Wernsing, J. (2016). _CryptoNets: Applying Neural Networks to Encrypted Data with High Throughput and Accuracy_.**  
+Microsoft Research.  
+https://www.microsoft.com/en-us/research/publication/cryptonets-applying-neural-networks-to-encrypted-data-with-high-throughput-and-accuracy/
+
+This work demonstrated that deterministic, privacy preserving inference could be achieved using homomorphic encryption.. Serving as the intellectual foundation for this encrypted MLE pipeline.
+
+### Contemporary Work (Building Upon This Project)
+
+Modern research continues to extend these ideas, combining encrypted computation, precision medicine, and clinical genomics.  
+One contemporary example that builds upon the lineage of privacy-preserving medical ML and uses the same MSK-IMPACT dataset referenced in our project is:
+
+**Huang, T., et al. (2023). _Pan-cancer prediction of molecular tumor features using machine learning on the MSK-IMPACT clinical sequencing cohort_. Nature Genetics.**  
+https://pmc.ncbi.nlm.nih.gov/articles/PMC10508812/
+
+This paper demonstrates how current machine-learning approaches leverage large-scale clinical genomics datasets such as MSK-IMPACT to perform tumor-feature prediction, representing the continuation of the research trajectory that our project contributes to.
+
+### This Project's Contribution
+
+**Research Paper:** [Machine Learning in Precision Medicine to Preserve Privacy via Encryption](https://arxiv.org/abs/2102.03412)
 
 ```bibtex
 @Article{Briguglio2021MachineLearningPrecisionMedicine-arxiv,

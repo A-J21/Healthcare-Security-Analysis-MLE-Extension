@@ -5,15 +5,31 @@ using System.Linq;
 
 namespace MLE_GUI.Services
 {
-    /// <summary>
-    /// LocalModelService: Loads ML models from CSV files instead of MongoDB.
+    /// LocalModelService: Loads ML models from CSV files instead of a database. (Previously loaded MongoDB)
     /// 
-    /// This allows the application to run entirely on Windows without needing
-    /// MongoDB or a separate server. Models are loaded directly from CSV files.
-    /// </summary>
+    /// PURPOSE:
+    /// This service replaces the original MongoDB-based model storage with a file-based
+    /// approach, allowing the application to run entirely locally without requiring
+    /// a database server or network infrastructure.
+    /// 
+    /// HOW IT WORKS:
+    /// - Models are stored as CSV files containing coefficient/weight matrices
+    /// - Each row in the CSV represents one output class
+    /// - Each column represents the weight for one input feature
+    /// - Models are loaded into memory at application startup
+    /// 
+    /// SUPPORTED MODELS:
+    /// - LogisticRegression (Healthcare): Default model in configDB/coefs.csv
+    /// - FinancialFraud, also LogisticRegression: Located in configDB/FinancialFraud/coefs.csv
+    /// - AcademicGrade, also LogisticRegression: Located in configDB/AcademicGrade/coefs.csv
     public class LocalModelService
     {
+        /// In-memory dictionary of loaded models, keyed by model name.
+        /// Models are loaded once at startup and reused for all predictions.
         private readonly Dictionary<string, Model> _models = new Dictionary<string, Model>();
+
+        /// Root directory containing model CSV files.
+        /// Defaults to SystemArchitecture/configDB/ relative to project root.
         private readonly string _modelsDirectory;
 
         /// <summary>
